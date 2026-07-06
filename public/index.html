@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CapitalCrew Factsheet Generator</title>
+<style>
+  :root {
+    --bg:#080D18;--card:#0F1825;--border:#1C2B40;--border2:#243550;
+    --ink:#E8EEF8;--muted:#8A9AB8;--faint:#4A5870;
+    --gold:#F0B429;--gold2:#D4941A;--pos:#2DD4A0;--neg:#F06060;--cyan:#38BDF8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;font-size:13px;min-height:100vh;}
+  #landing{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 20px;text-align:center;}
+  .logo{font-size:13px;letter-spacing:.2em;color:var(--gold);margin-bottom:32px;}
+  .logo span{display:block;font-size:10px;letter-spacing:.3em;color:var(--muted);margin-top:3px;}
+  .landing-title{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-bottom:8px;}
+  .landing-sub{color:var(--muted);font-size:14px;margin-bottom:40px;}
+  .ticker-wrap{display:flex;gap:10px;width:100%;max-width:440px;margin-bottom:16px;}
+  .ticker-input{flex:1;background:var(--card);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;font-size:20px;font-weight:700;color:var(--ink);letter-spacing:.1em;text-transform:uppercase;outline:none;transition:border-color .2s;}
+  .ticker-input:focus{border-color:var(--gold);}
+  .ticker-input::placeholder{color:var(--faint);font-weight:400;font-size:15px;text-transform:none;letter-spacing:0;}
+  .examples{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+  .ex-chip{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:5px 13px;font-size:12px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s;}
+  .ex-chip:hover{border-color:var(--gold);color:var(--gold);}
+  .btn{background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;border-radius:10px;padding:13px 24px;font-size:14px;font-weight:700;color:#0A0D14;cursor:pointer;transition:opacity .2s;}
+  .btn:hover{opacity:.88;}
+  .btn-sm{background:transparent;border:1px solid var(--border);border-radius:7px;padding:5px 14px;font-size:11px;color:var(--muted);cursor:pointer;letter-spacing:.1em;text-transform:uppercase;transition:border-color .15s,color .15s;}
+  .btn-sm:hover{border-color:var(--gold);color:var(--gold);}
+  #loading{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:20px;}
+  .spinner{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .load-ticker{font-size:32px;font-weight:700;color:var(--gold);letter-spacing:.1em;}
+  .load-steps{display:flex;flex-direction:column;gap:7px;margin-top:10px;}
+  .step{font-size:12px;color:var(--faint);transition:color .3s;}
+  .step.active{color:var(--cyan);}
+  .step.done{color:var(--pos);}
+  #result{display:none;}
+  .page{max-width:1100px;margin:0 auto;padding:0 20px 40px;}
+  .band{background:linear-gradient(90deg,#080D18,#0C1828,#080D18);border-bottom:1px solid var(--border);padding:8px 20px;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);display:flex;justify-content:space-between;align-items:center;}
+  .band b{color:var(--ink);}
+  .header{display:flex;justify-content:space-between;align-items:flex-end;padding:20px 0 12px;}
+  .header h1{font-size:28px;font-weight:700;letter-spacing:-.02em;}
+  .header .sub{color:var(--muted);font-size:12px;margin-top:3px;}
+  .header .sub b{color:var(--cyan);}
+  .cc-mark{font-weight:700;font-size:13px;letter-spacing:.15em;color:var(--gold);text-align:right;}
+  .cc-mark span{display:block;font-size:9px;letter-spacing:.3em;color:var(--muted);margin-top:2px;}
+  .chips{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+  .chip{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:10.5px;color:var(--muted);}
+  .chip b{display:block;font-size:12px;color:var(--ink);margin-top:1px;}
+  .warn{background:#1A0C10;border:1px solid #5C1A28;border-radius:8px;padding:9px 14px;margin-bottom:12px;font-size:11.5px;color:var(--neg);}
+  .verdict{display:grid;grid-template-columns:170px 1fr;gap:12px;margin-bottom:14px;}
+  .badge{background:linear-gradient(135deg,#111E30,#0D1828);border:1px solid var(--border2);border-top:3px solid var(--gold);border-radius:10px;padding:14px;text-align:center;}
+  .badge-lbl{font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);}
+  .badge-name{font-size:13px;font-weight:700;text-transform:uppercase;color:var(--gold);margin:4px 0;}
+  .score-num{font-size:48px;font-weight:700;color:var(--gold);line-height:1;}
+  .score-sub{font-size:10px;color:var(--faint);}
+  .bar-bg{background:var(--border);border-radius:4px;height:6px;margin:8px 0 4px;}
+  .bar-fill{background:linear-gradient(90deg,var(--gold),var(--gold2));height:6px;border-radius:4px;}
+  .vbox{background:var(--card);border:1px solid var(--border);border-top:3px solid var(--gold);border-radius:10px;padding:13px 16px;}
+  .vbox h3{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:6px;}
+  .vbox p{font-size:12.5px;color:var(--muted);line-height:1.55;}
+  .vbox p b{color:var(--ink);}
+  .sh{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--border);padding-bottom:5px;margin:14px 0 10px;}
+  .sh b{color:var(--cyan);}
+  .pos{color:var(--pos);}.neg{color:var(--neg);}.gold{color:var(--gold);}.cy{color:var(--cyan);}.mu{color:var(--muted);}
+  .rng{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:13px 16px;margin-bottom:14px;}
+  .rng-lr{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);}
+  .rbar{background:var(--border);border-radius:6px;height:10px;position:relative;margin:26px 0 8px;}
+  .rbar-fill{background:linear-gradient(90deg,#1A3A60,var(--cyan));height:10px;border-radius:6px;width:100%;position:absolute;}
+  .rdot{width:18px;height:18px;background:var(--gold);border:3px solid var(--bg);border-radius:50%;position:absolute;top:-4px;}
+  .rcur{position:absolute;top:-22px;font-size:11px;font-weight:700;color:var(--gold);white-space:nowrap;}
+  .rstat{display:grid;grid-template-columns:repeat(5,1fr);margin-top:10px;}
+  .rs{font-size:12px;}.rs small{display:block;color:var(--faint);font-size:10px;}
+  .g5{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px;}
+  .kcard{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 12px;}
+  .klbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin-bottom:8px;font-weight:600;}
+  .kr{display:flex;justify-content:space-between;margin-bottom:4px;}
+  .kk{font-size:11px;color:var(--muted);}.kv{font-size:11px;font-weight:700;}
+  .tbl-wrap{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;}
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;color:var(--faint);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;padding:6px 8px;border-bottom:1px solid var(--border);}
+  td{padding:8px;border-bottom:1px dashed #1A2840;font-size:11.5px;vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  .news-wrap{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 14px;margin-bottom:14px;}
+  .ni{display:grid;grid-template-columns:90px 1fr;padding:6px 0;border-bottom:1px dashed #1A2840;}
+  .ni:last-child{border-bottom:none;}
+  .nd{font-size:10px;color:var(--faint);padding-top:2px;}
+  .nt{font-size:11.5px;color:var(--muted);}.nt b{color:var(--ink);}
+  .t3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+  .tcard{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 13px;}
+  .tcard.bull{border-top:3px solid var(--cyan);}.tcard.base{border-top:3px solid var(--gold);}.tcard.bear{border-top:3px solid var(--neg);}
+  .tcard h4{font-size:12.5px;font-weight:700;margin-bottom:6px;}
+  .tcard p{font-size:11px;color:var(--muted);line-height:1.5;}
+  .cr2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .crcard{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;}
+  .crtitle{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;margin-bottom:7px;}
+  .cri{font-size:11.5px;color:var(--muted);padding:4px 0 4px 18px;position:relative;border-bottom:1px dashed #1A2840;}
+  .cri:last-child{border-bottom:none;}
+  .cri.c::before{content:"✓";position:absolute;left:0;color:var(--pos);font-weight:700;}
+  .cri.r::before{content:"⚠";position:absolute;left:0;color:var(--neg);font-size:10px;}
+  .scen{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;}
+  .fb{background:linear-gradient(135deg,#111E30,#0C1828);border:1px solid var(--border2);border-radius:8px;padding:11px 16px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;}
+  .fb-lbl{font-size:11px;color:var(--muted);}.fb-calc{font-size:10.5px;color:var(--faint);margin-top:2px;}
+  .fb-val{font-size:26px;font-weight:700;color:var(--gold);}.fb-note{font-size:10.5px;color:var(--faint);text-align:right;}
+  .cap{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;}
+  .capl{padding-right:20px;}.capr{border-left:1px solid var(--border);padding-left:20px;}
+  .cap-sec{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:8px;font-weight:600;}
+  .caprow{display:flex;justify-content:space-between;margin-bottom:5px;}
+  .capk{font-size:12px;color:var(--muted);}.capv{font-size:12px;font-weight:700;}
+  .footer{padding-top:12px;border-top:1px solid var(--border);font-size:10.5px;color:var(--faint);line-height:1.6;}
+  .footer b{color:var(--muted);}
+  .err-box{background:#1A0C10;border:1px solid var(--neg);border-radius:10px;padding:24px;text-align:center;color:var(--neg);margin:40px 0;}
+</style>
+</head>
+<body>
+
+<div id="landing">
+  <div class="logo">CAPITALCREW<span>RESEARCH DESK</span></div>
+  <div class="landing-title">📊 Factsheet Generator</div>
+  <div class="landing-sub">Ticker eingeben → KI analysiert → Factsheet fertig</div>
+  <div class="ticker-wrap">
+    <input class="ticker-input" id="tickerInput" placeholder="z.B. AAPL, NVDA, MSTR ..." maxlength="10" />
+    <button class="btn" onclick="startAnalysis()">Analysieren →</button>
+  </div>
+  <div class="examples" style="margin-bottom:28px">
+    <span class="ex-chip" onclick="fillTicker('NVDA')">NVDA</span>
+    <span class="ex-chip" onclick="fillTicker('PLTR')">PLTR</span>
+    <span class="ex-chip" onclick="fillTicker('MSTR')">MSTR</span>
+    <span class="ex-chip" onclick="fillTicker('SMCI')">SMCI</span>
+    <span class="ex-chip" onclick="fillTicker('IONQ')">IONQ</span>
+    <span class="ex-chip" onclick="fillTicker('RKLB')">RKLB</span>
+    <span class="ex-chip" onclick="fillTicker('NUAI')">NUAI</span>
+    <span class="ex-chip" onclick="fillTicker('CIFR')">CIFR</span>
+  </div>
+  <div style="color:var(--faint);font-size:11px">Powered by CapitalCrew × Claude AI</div>
+</div>
+
+<div id="loading">
+  <div class="load-ticker" id="loadTicker"></div>
+  <div class="spinner"></div>
+  <div style="color:var(--muted);font-size:13px" id="loadStatus">KI analysiert Aktie...</div>
+  <div class="load-steps">
+    <div class="step" id="s1">⬜ Unternehmensdaten abrufen...</div>
+    <div class="step" id="s2">⬜ Finanzkennzahlen analysieren...</div>
+    <div class="step" id="s3">⬜ Chancen &amp; Risiken bewerten...</div>
+    <div class="step" id="s4">⬜ Factsheet wird erstellt...</div>
+  </div>
+</div>
+
+<div id="result"></div>
+
+<script>
+const STEP_TEXTS = ['Unternehmensdaten abrufen...','Finanzkennzahlen analysieren...','Chancen & Risiken bewerten...','Factsheet wird erstellt...'];
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('tickerInput').addEventListener('keydown', e => { if(e.key==='Enter') startAnalysis(); });
+});
+
+function fillTicker(t) { document.getElementById('tickerInput').value = t; }
+
+function resetApp() {
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('result').innerHTML = '';
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('landing').style.display = 'flex';
+  ['s1','s2','s3','s4'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    if(el) { el.className='step'; el.textContent='⬜ '+STEP_TEXTS[i]; }
+  });
+  document.getElementById('tickerInput').value = '';
+}
+
+function setStep(i, state) {
+  const el = document.getElementById('s'+(i+1));
+  if(!el) return;
+  if(state==='active') { el.className='step active'; el.textContent='🔄 '+STEP_TEXTS[i]; }
+  else if(state==='done') { el.className='step done'; el.textContent='✅ '+STEP_TEXTS[i]; }
+}
+
+function animateSteps() {
+  [0,1,2,3].forEach(i => setTimeout(() => { if(i>0) setStep(i-1,'done'); setStep(i,'active'); }, i*2000));
+}
+
+function extractJSON(text) {
+  text = text.replace(/```json/g,'').replace(/```/g,'').trim();
+  let depth=0, start=-1, end=-1;
+  for(let i=0;i<text.length;i++) {
+    if(text[i]==='{'){if(depth===0)start=i;depth++;}
+    else if(text[i]==='}'){depth--;if(depth===0){end=i;break;}}
+  }
+  if(start===-1||end===-1) throw new Error('Kein JSON gefunden');
+  let s = text.slice(start,end+1);
+  try { return JSON.parse(s); } catch(e) {}
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,'')
+       .replace(/("(?:[^"\\]|\\.)*")/g, m => m.replace(/\n/g,'\\n').replace(/\r/g,'\\r').replace(/\t/g,'\\t'));
+  return JSON.parse(s);
+}
+
+async function startAnalysis() {
+  const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+  if(!ticker) return;
+  document.getElementById('landing').style.display = 'none';
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('loadTicker').textContent = ticker;
+  animateSteps();
+
+  let lastError = '';
+  for(let attempt=1; attempt<=3; attempt++) {
+    try {
+      if(attempt>1) {
+        document.getElementById('loadStatus').textContent = `Versuch ${attempt}/3...`;
+        await new Promise(r=>setTimeout(r,1000));
+      }
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker })
+      });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const parsed = extractJSON(data.raw);
+      [0,1,2,3].forEach(i=>setStep(i,'done'));
+      await new Promise(r=>setTimeout(r,500));
+      document.getElementById('loading').style.display='none';
+      renderFactsheet(parsed);
+      return;
+    } catch(err) {
+      lastError = err.message;
+      console.warn(`Versuch ${attempt} fehlgeschlagen:`, err.message);
+    }
+  }
+
+  document.getElementById('loading').style.display='none';
+  document.getElementById('result').style.display='block';
+  document.getElementById('result').innerHTML=`
+    <div class="page">
+      <div class="err-box">
+        <div style="font-size:24px;margin-bottom:12px">⚠</div>
+        <b>Fehler:</b> ${lastError}
+      </div>
+      <div style="text-align:center;margin-top:20px">
+        <button class="btn" onclick="resetApp()">← Zurück</button>
+      </div>
+    </div>`;
+}
+
+function pct(lo,hi,cur){const r=hi-lo;return r<=0?50:Math.min(96,Math.max(4,((cur-lo)/r)*100));}
+function s(v,fb='—'){return(v!==undefined&&v!==null&&v!=='')? v:fb;}
+
+function renderFactsheet(d) {
+  const dotPct = pct(d.w52lowRaw||0,d.w52highRaw||1,d.kursRaw||0);
+  const scorePct = Math.min(100,Math.max(0,d.score||0));
+  const kpiLabels=['💰 Bewertung','📉 P&L','🏦 Bilanz','🏗 Kapital','📌 Aktie'];
+  const kpiKeys=['bewertung','pl','bilanz','kapital','aktie'];
+  const kpiCards=kpiKeys.map((key,i)=>`<div class="kcard"><div class="klbl">${kpiLabels[i]}</div>${(d.kpis?.[key]||[]).map(r=>`<div class="kr"><span class="kk">${s(r.k)}</span><span class="kv ${r.color||''}">${s(r.v)}</span></div>`).join('')}</div>`).join('');
+
+  const html=`
+  <div class="band">
+    <span>CapitalCrew Research Desk &nbsp;|&nbsp; <b>${s(d.companyName)} (${s(d.ticker)})</b> &nbsp;|&nbsp; ${s(d.exchange)} &nbsp;|&nbsp; ${s(d.stand)}</span>
+    <button class="btn-sm" onclick="resetApp()">← Neuer Ticker</button>
+  </div>
+  <div class="page">
+    <div class="header">
+      <div><h1>${s(d.companyName)}</h1><div class="sub">Ticker: <b>${s(d.ticker)}</b> &nbsp;·&nbsp; ${s(d.exchange)} &nbsp;·&nbsp; ${s(d.sector)} &nbsp;·&nbsp; ${s(d.hq)}</div></div>
+      <div class="cc-mark">CAPITALCREW<span>FACTSHEET · 2026</span></div>
+    </div>
+    <div class="chips">${(d.chips||[]).map(c=>`<div class="chip">${s(c.label)}<b>${s(c.value)}</b></div>`).join('')}</div>
+    ${d.warning?`<div class="warn"><b>⚠ Achtung:</b> ${d.warning}</div>`:''}
+    <div class="verdict">
+      <div class="badge">
+        <div class="badge-lbl">CapitalCrew-Urteil</div>
+        <div class="badge-name">${s(d.verdict)}</div>
+        <div class="score-num">${s(d.score,'?')}</div>
+        <div class="score-sub">von 100 Punkten</div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${scorePct}%"></div></div>
+        <div style="font-size:10px;color:var(--faint);margin-top:3px">${s(d.sector)}</div>
+      </div>
+      <div class="vbox"><h3>Investment-Urteil</h3><p>${s(d.verdictText)}</p></div>
+    </div>
+    <div class="sh">📈 <b>Kurssituation</b> — 52-Wochen-Spanne</div>
+    <div class="rng">
+      <div class="rng-lr"><span>52W-Tief: <b class="neg">${s(d.w52low)}</b></span><span>52W-Hoch: <b class="pos">${s(d.w52high)}</b></span></div>
+      <div class="rbar"><div class="rbar-fill"></div><div class="rdot" style="left:calc(${dotPct}% - 9px)"><div class="rcur" style="left:-22px">${s(d.kurs)}</div></div></div>
+      <div style="height:12px"></div>
+      <div class="rstat">
+        <div class="rs"><small>Kurs</small><b class="gold">${s(d.kurs)}</b></div>
+        <div class="rs"><small>Market Cap</small><b>${s(d.marketcap)}</b></div>
+        <div class="rs"><small>Ø Vol. (3M)</small><b>${s(d.volume)}</b></div>
+        <div class="rs"><small>Beta</small><b>${s(d.beta)}</b></div>
+        <div class="rs"><small>Analyst-PT</small><b class="pos">${s(d.analystPT)}</b></div>
+      </div>
+    </div>
+    <div class="sh">📊 <b>Key Financials</b></div>
+    <div class="g5">${kpiCards}</div>
+    <div class="sh">🏗 <b>Projekte &amp; Segmente</b></div>
+    <div class="tbl-wrap"><table>
+      <tr><th style="width:16%">Segment/Projekt</th><th style="width:13%">Standort</th><th style="width:10%">Größe</th><th style="width:17%">Status</th><th>Details</th></tr>
+      ${(d.projekte||[]).map(p=>`<tr><td><b class="cy">${s(p.name)}</b></td><td>${s(p.standort)}</td><td><b class="${p.kapColor||''}">${s(p.kapazitaet)}</b></td><td>${s(p.status)}</td><td>${s(p.details)}</td></tr>`).join('')}
+    </table></div>
+    <div class="sh">📰 <b>News &amp; Katalysatoren</b></div>
+    <div class="news-wrap">${(d.news||[]).map(n=>`<div class="ni"><div class="nd">${s(n.date)}</div><div class="nt">${s(n.text)}</div></div>`).join('')}</div>
+    <div class="sh">🎯 <b>Investment-Thesen</b></div>
+    <div class="t3">
+      <div class="tcard bull"><h4>🐂 Bull Case</h4><p>${s(d.bullCase)}</p></div>
+      <div class="tcard base"><h4>⚖ Base Case</h4><p>${s(d.baseCase)}</p></div>
+      <div class="tcard bear"><h4>🐻 Bear Case</h4><p>${s(d.bearCase)}</p></div>
+    </div>
+    <div class="sh">⚖ <b>Chancen &amp; Risiken</b></div>
+    <div class="cr2">
+      <div class="crcard"><div class="crtitle pos">✅ Chancen</div>${(d.chancen||[]).map(c=>`<div class="cri c">${c}</div>`).join('')}</div>
+      <div class="crcard"><div class="crtitle neg">⚠ Risiken</div>${(d.risiken||[]).map(r=>`<div class="cri r">${r}</div>`).join('')}</div>
+    </div>
+    <div class="sh">🎲 <b>Szenario-Analyse &amp; Fair Value</b></div>
+    <div class="scen">
+      <table>
+        <tr><th style="width:10%">Szenario</th><th style="width:8%">Gew.</th><th style="width:28%">Annahmen</th><th style="width:11%">Fair Value</th><th>Begründung</th></tr>
+        ${(d.szenarios||[]).map(s2=>`<tr><td><b class="${s2.color}">${s(s2.name)}</b></td><td class="mu">${s(s2.gew)}</td><td>${s(s2.annahmen)}</td><td class="${s2.color}">${s(s2.fv)}</td><td>${s(s2.begruendung)}</td></tr>`).join('')}
+      </table>
+      <div class="fb">
+        <div><div class="fb-lbl">Gewichteter Fair Value</div><div class="fb-calc">${s(d.fairValueCalc)}</div></div>
+        <div style="text-align:right"><div class="fb-val">${s(d.fairValueGew)}</div><div class="fb-note">${s(d.fairValueNote)}</div></div>
+      </div>
+    </div>
+    <div class="sh">🏦 <b>Kapitalstruktur</b></div>
+    <div class="cap">
+      <div class="capl"><div class="cap-sec">Eigenkapital</div>${(d.kapEigenkapital||[]).map(r=>`<div class="caprow"><span class="capk">${s(r.k)}</span><span class="capv ${r.color||''}">${s(r.v)}</span></div>`).join('')}</div>
+      <div class="capr"><div class="cap-sec">Fremdkapital</div>${(d.kapFremdkapital||[]).map(r=>`<div class="caprow"><span class="capk">${s(r.k)}</span><span class="capv ${r.color||''}">${s(r.v)}</span></div>`).join('')}</div>
+    </div>
+    <div class="footer">
+      <b>Quellen:</b> ${s(d.quellen,'Yahoo Finance, Bloomberg, SEC-Filings')} &nbsp;·&nbsp;
+      <b>Stand:</b> ${s(d.stand)} &nbsp;·&nbsp;
+      <b>Disclaimer:</b> Keine Anlageberatung. Nur zu Informationszwecken. — CapitalCrew Research Desk
+    </div>
+  </div>`;
+
+  const el=document.getElementById('result');
+  el.style.display='block'; el.innerHTML=html;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+</script>
+</body>
+</html>
