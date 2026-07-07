@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
   // ── PARALLEL FETCHES ──
   const [yahooRaw, fmpProfileRaw, fmpMetricsRaw, fmpIncomeRaw, fmpAnalystRaw,
-         fmpInsiderRaw, fmpEarningsRaw, fmpDividendRaw, newsRaw, priceHistRaw] = await Promise.all([
+         fmpInsiderRaw, fmpEarningsRaw, fmpDividendRaw, newsRaw, priceHistRaw, yahooSummaryRaw] = await Promise.all([
     // Yahoo Finance — Live Kurs
     safe(fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=1y`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
     // FMP stable — Firmenprofil
@@ -35,6 +35,8 @@ export default async function handler(req, res) {
     safe(fetch(`https://newsapi.org/v2/everything?q=${t}+stock&language=en&sortBy=publishedAt&pageSize=5&apiKey=${NEWS}`).then(r=>r.json())),
     // Yahoo — Preisverlauf für Technische Analyse
     safe(fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=6mo`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
+    // Yahoo — quoteSummary für Market Cap + Short Interest
+    safe(fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${t}?modules=summaryDetail,defaultKeyStatistics`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
   ]);
 
   // ── YAHOO KURSDATEN ──
@@ -46,25 +48,18 @@ export default async function handler(req, res) {
   const longName = meta.longName || meta.shortName || t;
   const sharesOut = meta.sharesOutstanding || 0;
 
-  // Market Cap — mehrere Fallbacks
-  let mktCap = meta.marketCap || 0;
-  if (!mktCap) {
-    try {
-      const qsr = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${t}?modules=summaryDetail`,{headers:{'User-Agent':'Mozilla/5.0'}});
-      const qsj = await qsr.json();
-      mktCap = qsj?.quoteSummary?.result?.[0]?.summaryDetail?.marketCap?.raw || 0;
-    } catch(e) {}
-  }
+  // Market Cap — aus parallelem quoteSummary fetch
+  const summaryDetail = yahooSummaryRaw?.quoteSummary?.result?.[0]?.summaryDetail;
+  const keyStats = yahooSummaryRaw?.quoteSummary?.result?.[0]?.defaultKeyStatistics;
+  let mktCap = meta.marketCap || summaryDetail?.marketCap?.raw || 0;
   if (!mktCap && liveKurs && sharesOut) mktCap = liveKurs * sharesOut;
 
-  // Short Interest
+  // Short Interest — aus parallelem quoteSummary fetch
   let shortPct = 'n/a';
-  try {
-    const sr = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${t}?modules=defaultKeyStatistics`,{headers:{'User-Agent':'Mozilla/5.0'}});
-    const sj = await sr.json();
-    const stats = sj?.quoteSummary?.result?.[0]?.defaultKeyStatistics;
-    if (stats?.shortPercentOfFloat?.raw != null) shortPct = (stats.shortPercentOfFloat.raw * 100).toFixed(1) + '%';
-  } catch(e) {}
+  if (keyStats?.shortPercentOfFloat?.raw != null) shortPct = (keyStats.shortPercentOfFloat.raw * 100).toFixed(1) + '%';
+  
+  // Shares outstanding — aus Yahoo Stats
+  const sharesOutFinal = keyStats?.sharesOutstanding?.raw || sharesOut;
 
   // ── FMP PROFIL (stable) ──
   const profArr = Array.isArray(fmpProfileRaw) ? fmpProfileRaw : (fmpProfileRaw ? [fmpProfileRaw] : []);
