@@ -70,17 +70,6 @@ export default async function handler(req, res) {
   const pb = r?.priceToBookRatioTTM?.toFixed(1) || 'n/a';
   const fcfPS = r?.freeCashFlowPerShareTTM?.toFixed(2) || 'n/a';
   const divYield = r?.dividendYieldTTM ? (r.dividendYieldTTM * 100).toFixed(2) + '%' : '0%';
-  // ROE aus Balance Sheet berechnen falls Ratio fehlt
-  const balArr = Array.isArray(balanceRaw) ? balanceRaw : (balanceRaw ? [balanceRaw] : []);
-  const bal = balArr[0] || null;
-  let roe = r?.returnOnEquityTTM ? (r.returnOnEquityTTM * 100).toFixed(1) + '%' : 'n/a';
-  if (roe === 'n/a' && inc0?.netIncome && bal?.totalStockholdersEquity) {
-    roe = ((inc0.netIncome / bal.totalStockholdersEquity) * 100).toFixed(1) + '%';
-  }
-  // Analyst Estimates
-  const analystEstArr = Array.isArray(analystEstRaw) ? analystEstRaw : [];
-  const analystEst = analystEstArr[0] || null;
-  const analystEstStr = analystEst ? `EPS-Est: ${analystEst.estimatedEpsAvg?.toFixed(2)||'n/a'} | Rev-Est: ${analystEst.estimatedRevenueAvg?fmt(analystEst.estimatedRevenueAvg)+' USD':'n/a'}` : 'n/a';
   const deRatio = r?.debtToEquityRatioTTM?.toFixed(2) || 'n/a';
   const currentRatio = r?.currentRatioTTM?.toFixed(2) || 'n/a';
   const netMarginR = r?.netProfitMarginTTM ? (r.netProfitMarginTTM * 100).toFixed(1) + '%' : 'n/a';
@@ -94,6 +83,18 @@ export default async function handler(req, res) {
   const eps = inc0?.eps?.toFixed(2) || fmpQuote?.eps?.toFixed(2) || 'n/a';
   const netMargin = inc0?.netIncomeRatio ? (inc0.netIncomeRatio * 100).toFixed(1) + '%' : netMarginR;
   const revenueYoY = inc0 && inc1 && inc1.revenue ? fmtPct(((inc0.revenue - inc1.revenue) / Math.abs(inc1.revenue)) * 100) : 'n/a';
+
+  // ROE aus Balance Sheet berechnen falls Ratio fehlt
+  const balArr = Array.isArray(balanceRaw) ? balanceRaw : (balanceRaw ? [balanceRaw] : []);
+  const bal = balArr[0] || null;
+  let roe = r?.returnOnEquityTTM ? (r.returnOnEquityTTM * 100).toFixed(1) + '%' : 'n/a';
+  if (roe === 'n/a' && inc0?.netIncome && bal?.totalStockholdersEquity) {
+    roe = ((inc0.netIncome / bal.totalStockholdersEquity) * 100).toFixed(1) + '%';
+  }
+  // Analyst Estimates
+  const analystEstArr = Array.isArray(analystEstRaw) ? analystEstRaw : [];
+  const analystEst = analystEstArr[0] || null;
+  const analystEstStr = analystEst ? `EPS-Est: ${analystEst.estimatedEpsAvg?.toFixed(2)||'n/a'} | Rev-Est: ${analystEst.estimatedRevenueAvg?fmt(analystEst.estimatedRevenueAvg)+' USD':'n/a'}` : 'n/a';
 
   // ── ANALYST ──
   const anArr = Array.isArray(analystRaw) ? analystRaw : [];
