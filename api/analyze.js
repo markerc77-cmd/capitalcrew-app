@@ -33,13 +33,21 @@ export default async function handler(req, res) {
   const currency=meta.currency||'USD', exchange=meta.fullExchangeName||'NASDAQ', longName=meta.longName||meta.shortName||t;
   const sharesOut=meta.sharesOutstanding||0;
 
-  // Market Cap — Yahoo erst, dann FMP als Fallback
+  // Market Cap — mehrere Quellen als Fallback
   let mktCap = meta.marketCap||0;
   const prof=Array.isArray(profileRaw)?profileRaw[0]:null;
   if(!mktCap && prof?.mktCap) mktCap = prof.mktCap;
   if(!mktCap && liveKurs && sharesOut) mktCap = liveKurs * sharesOut;
-  // Letzter Fallback: aus FMP Profil price * shares
   if(!mktCap && prof?.price && prof?.sharesOutstanding) mktCap = prof.price * prof.sharesOutstanding;
+  // Extra Fallback: Yahoo quoteSummary
+  if(!mktCap) {
+    try {
+      const qsr=await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${t}?modules=summaryDetail`,{headers:{'User-Agent':'Mozilla/5.0'}});
+      const qsj=await qsr.json();
+      const sd=qsj?.quoteSummary?.result?.[0]?.summaryDetail;
+      if(sd?.marketCap?.raw) mktCap=sd.marketCap.raw;
+    } catch(e){}
+  }
 
   // Short Interest
   let shortPct='n/a';
