@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   function safe(p){return p.catch(()=>null);}
   const today=new Date().toLocaleDateString('de-DE',{month:'long',year:'numeric'});
 
-  const [yahooRaw,profileRaw,metricsRaw,incomeRaw,analystRaw,insiderRaw,earningsRaw,dividendRaw,newsRaw,priceHistRaw,secRaw] = await Promise.all([
+  const [yahooRaw,profileRaw,metricsRaw,incomeRaw,analystRaw,insiderRaw,earningsRaw,dividendRaw,newsRaw,priceHistRaw] = await Promise.all([
     safe(fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=1y`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
     safe(fetch(`https://financialmodelingprep.com/api/v3/profile/${t}?apikey=${FMP}`).then(r=>r.json())),
     safe(fetch(`https://financialmodelingprep.com/api/v3/key-metrics-ttm/${t}?apikey=${FMP}`).then(r=>r.json())),
@@ -23,28 +23,34 @@ export default async function handler(req, res) {
     safe(fetch(`https://financialmodelingprep.com/api/v3/historical-price-full/stock_dividend/${t}?apikey=${FMP}`).then(r=>r.json())),
     safe(fetch(`https://newsapi.org/v2/everything?q=${t}+stock&language=en&sortBy=publishedAt&pageSize=5&apiKey=${NEWS}`).then(r=>r.json())),
     safe(fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=6mo`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
-    // SEC EDGAR — Institutional Ownership (13F filings)
-    safe(fetch(`https://data.sec.gov/submissions/CIK${t}.json`,{headers:{'User-Agent':'CapitalCrew research@capitalcrew.de'}}).then(r=>r.json())),
   ]);
 
-  // ── YAHOO KURSDATEN ──
+  // ── YAHOO ──
   const meta=yahooRaw?.chart?.result?.[0]?.meta||{};
-  const liveKurs=meta.regularMarketPrice||0, w52low=meta.fiftyTwoWeekLow||0, w52high=meta.fiftyTwoWeekHigh||0;
-  const mktCap=meta.marketCap||0, vol=meta.regularMarketVolume||0;
+  const liveKurs=meta.regularMarketPrice||0;
+  const w52low=meta.fiftyTwoWeekLow||0, w52high=meta.fiftyTwoWeekHigh||0;
+  const vol=meta.regularMarketVolume||0;
   const currency=meta.currency||'USD', exchange=meta.fullExchangeName||'NASDAQ', longName=meta.longName||meta.shortName||t;
   const sharesOut=meta.sharesOutstanding||0;
 
-  // Short Interest aus Yahoo Summary
+  // Market Cap — Yahoo erst, dann FMP als Fallback
+  let mktCap = meta.marketCap||0;
+  const prof=Array.isArray(profileRaw)?profileRaw[0]:null;
+  if(!mktCap && prof?.mktCap) mktCap = prof.mktCap;
+  if(!mktCap && liveKurs && sharesOut) mktCap = liveKurs * sharesOut;
+  // Letzter Fallback: aus FMP Profil price * shares
+  if(!mktCap && prof?.price && prof?.sharesOutstanding) mktCap = prof.price * prof.sharesOutstanding;
+
+  // Short Interest
   let shortPct='n/a';
   try {
-    const summaryRes=await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${t}?modules=defaultKeyStatistics`,{headers:{'User-Agent':'Mozilla/5.0'}});
-    const summaryJson=await summaryRes.json();
-    const stats=summaryJson?.quoteSummary?.result?.[0]?.defaultKeyStatistics;
+    const sr=await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${t}?modules=defaultKeyStatistics`,{headers:{'User-Agent':'Mozilla/5.0'}});
+    const sj=await sr.json();
+    const stats=sj?.quoteSummary?.result?.[0]?.defaultKeyStatistics;
     if(stats?.shortPercentOfFloat?.raw!=null) shortPct=(stats.shortPercentOfFloat.raw*100).toFixed(1)+'%';
   } catch(e){}
 
   // ── FMP PROFIL ──
-  const prof=Array.isArray(profileRaw)?profileRaw[0]:null;
   const sektor=prof?.sector||'n/a', industrie=prof?.industry||'n/a';
   const hq=prof?`${prof.city||''}, ${prof.country||''}`.replace(/^, |, $/,''):'n/a';
   const beta=prof?.beta?.toFixed(2)||'n/a', ceo=prof?.ceo||'n/a';
@@ -86,7 +92,7 @@ export default async function handler(req, res) {
   const nextE=earnList.find(e=>new Date(e.date)>new Date());
   const lastE=earnList.find(e=>new Date(e.date)<=new Date());
   const earningsStr=nextE?`Naechster: ${nextE.date} | EPS-Est: ${nextE.epsEstimated?.toFixed(2)||'n/a'} USD`
-    :lastE?`Letzter: ${lastE.date} | EPS: ${lastE.eps?.toFixed(2)||'n/a'} USD (Est: ${lastE.epsEstimated?.toFixed(2)||'n/a'})`:'n/a';
+    :lastE?`Letzter: ${lastE.date} | EPS: ${lastE.eps?.toFixed(2)||'n/a'} USD`:'n/a';
 
   // ── DIVIDENDEN ──
   const divHist=dividendRaw?.historical?.slice(0,3)||[];
@@ -98,113 +104,95 @@ export default async function handler(req, res) {
     ?articles.map(a=>`{"date":"${a.publishedAt?.slice(0,10)||'n/a'}","text":"${(a.title||'').replace(/"/g,"'").replace(/\n/g,' ').slice(0,120)}"}`)
     :['{"date":"n/a","text":"Keine aktuellen News verfuegbar."}'];
 
-  // ── TECHNISCHE INDIKATOREN (aus Yahoo 6M Daten) ──
+  // ── TECHNISCHE INDIKATOREN ──
   let rsi='n/a', rsiSignal='Neutral';
-  let macd='n/a', macdSignal='n/a', macdHist='n/a', macdTrend='n/a';
+  let macdVal='n/a', macdSignalVal='n/a', macdHistVal='n/a', macdTrend='n/a';
   let bbUpper='n/a', bbMiddle='n/a', bbLower='n/a', bbSignal='n/a';
 
   try {
     const closes=priceHistRaw?.chart?.result?.[0]?.indicators?.quote?.[0]?.close||[];
     const c=closes.filter(Boolean);
 
-    if(c.length>=20) {
-      // RSI (14)
-      const rsiPeriod=14;
-      let gains=0,losses=0;
-      for(let i=c.length-rsiPeriod;i<c.length;i++){
-        const d=c[i]-c[i-1];
-        if(d>0)gains+=d;else losses+=Math.abs(d);
-      }
-      const avgG=gains/rsiPeriod, avgL=losses/rsiPeriod;
-      const rs=avgL===0?100:avgG/avgL;
-      const rsiVal=100-(100/(1+rs));
-      rsi=rsiVal.toFixed(1);
-      rsiSignal=rsiVal>70?'Ueberkauft ⚠':rsiVal<30?'Ueberverkauft 📉':'Neutral ✓';
+    if(c.length>=20){
+      // RSI 14
+      const rp=14; let gains=0,losses=0;
+      for(let i=c.length-rp;i<c.length;i++){const d=c[i]-c[i-1];if(d>0)gains+=d;else losses+=Math.abs(d);}
+      const rs=(losses===0)?100:(gains/rp)/(losses/rp);
+      const rv=100-(100/(1+rs));
+      rsi=rv.toFixed(1);
+      rsiSignal=rv>70?'Ueberkauft ⚠':rv<30?'Ueberverkauft 📉':'Neutral ✓';
 
       // EMA helper
-      function ema(data, period) {
+      function ema(data,period){
         const k=2/(period+1);
-        let emaVal=data.slice(0,period).reduce((a,b)=>a+b,0)/period;
-        for(let i=period;i<data.length;i++) emaVal=data[i]*k+emaVal*(1-k);
-        return emaVal;
+        let e=data.slice(0,period).reduce((a,b)=>a+b,0)/period;
+        for(let i=period;i<data.length;i++) e=data[i]*k+e*(1-k);
+        return e;
       }
 
-      // MACD (12, 26, 9)
-      if(c.length>=26) {
-        const ema12=ema(c,12), ema26=ema(c,26);
-        const macdLine=ema12-ema26;
-        // Signal line approx
-        const macdVals=[];
-        for(let i=26;i<=c.length;i++) {
-          const e12=ema(c.slice(0,i),12), e26=ema(c.slice(0,i),26);
-          macdVals.push(e12-e26);
-        }
-        const signalLine=ema(macdVals,9);
-        const histogram=macdLine-signalLine;
-        macd=macdLine.toFixed(3);
-        macdSignal=signalLine.toFixed(3);
-        macdHist=histogram.toFixed(3);
-        macdTrend=histogram>0?'Bullish ↑':'Bearish ↓';
+      // MACD 12/26/9
+      if(c.length>=35){
+        const macdSeries=[];
+        for(let i=26;i<=c.length;i++) macdSeries.push(ema(c.slice(0,i),12)-ema(c.slice(0,i),26));
+        const sig=ema(macdSeries,9);
+        const lastMacd=macdSeries[macdSeries.length-1];
+        const hist=lastMacd-sig;
+        macdVal=lastMacd.toFixed(3); macdSignalVal=sig.toFixed(3); macdHistVal=hist.toFixed(3);
+        macdTrend=hist>0?'Bullish ↑':'Bearish ↓';
       }
 
-      // Bollinger Bands (20, 2)
-      const bbPeriod=20;
-      const recent20=c.slice(-bbPeriod);
-      const sma=recent20.reduce((a,b)=>a+b,0)/bbPeriod;
-      const variance=recent20.reduce((a,b)=>a+Math.pow(b-sma,2),0)/bbPeriod;
-      const stdDev=Math.sqrt(variance);
-      const upper=sma+2*stdDev, lower=sma-2*stdDev;
-      const lastClose=c[c.length-1];
-      bbUpper=upper.toFixed(2); bbMiddle=sma.toFixed(2); bbLower=lower.toFixed(2);
-      bbSignal=lastClose>upper?'Oberes Band (Ueberkauft)':lastClose<lower?'Unteres Band (Ueberverkauft)':'Innerhalb Bands (Neutral)';
+      // Bollinger 20/2
+      const bb=c.slice(-20);
+      const sma=bb.reduce((a,b)=>a+b,0)/20;
+      const std=Math.sqrt(bb.reduce((a,b)=>a+Math.pow(b-sma,2),0)/20);
+      bbUpper=(sma+2*std).toFixed(2); bbMiddle=sma.toFixed(2); bbLower=(sma-2*std).toFixed(2);
+      const lc=c[c.length-1];
+      bbSignal=lc>(sma+2*std)?'Oberes Band (Ueberkauft)':lc<(sma-2*std)?'Unteres Band (Ueberverkauft)':'Innerhalb der Bands';
     }
   } catch(e){}
 
-  // ── SEC INSTITUTIONAL OWNERSHIP ──
-  // Versuche direkt über FMP (einfacher)
-  let instOwnership='n/a';
+  // ── INSTITUTIONAL OWNERSHIP via FMP ──
+  let instOwnership='n/a', instPct='n/a';
   try {
-    const instRes=await fetch(`https://financialmodelingprep.com/api/v3/institutional-holder/${t}?apikey=${FMP}`);
-    const instJson=await instRes.json();
-    if(Array.isArray(instJson)&&instJson.length>0) {
-      const top3=instJson.slice(0,3).map(i=>`${i.holder}: ${i.shares?.toLocaleString('de-DE')} Aktien`).join(' | ');
-      const totalShares=instJson.reduce((a,b)=>a+(b.shares||0),0);
-      const pct=sharesOut>0?((totalShares/sharesOut)*100).toFixed(1)+'%':'n/a';
-      instOwnership=`${pct} inst. | Top 3: ${top3}`;
+    const ir=await fetch(`https://financialmodelingprep.com/api/v3/institutional-holder/${t}?apikey=${FMP}`);
+    const ij=await ir.json();
+    if(Array.isArray(ij)&&ij.length>0){
+      const total=ij.reduce((a,b)=>a+(b.shares||0),0);
+      instPct=sharesOut>0?((total/sharesOut)*100).toFixed(1)+'%':'n/a';
+      const top3=ij.slice(0,3).map(i=>`${i.holder} (${i.shares?.toLocaleString('de-DE')})`).join(', ');
+      instOwnership=`${instPct} | Top 3: ${top3}`;
     }
   } catch(e){}
 
-  // ── PROMPT FÜR CLAUDE ──
+  const mktCapStr = fmtUSD(mktCap);
+
   const prompt=`Du bist Aktienanalyst fuer CapitalCrew. Erstelle Factsheet fuer ${t}.
 
-ECHTE DATEN (exakt uebernehmen):
-Kurs: ${liveKurs} ${currency} | 52W: ${w52low}-${w52high} | MarketCap: ${fmtUSD(mktCap)} | Shares: ${sharesOut?fmt(sharesOut)+' Stk':'n/a'}
-Sektor: ${sektor} | Industrie: ${industrie} | HQ: ${hq} | CEO: ${ceo} | Mitarbeiter: ${employees} | IPO: ${ipoDate}
-KGV: ${pe}x | P/S: ${ps}x | P/B: ${pb}x | EV: ${ev} | DCF: ${analystPT}
-Umsatz: ${revenue} (${revenueYoY}) | Nettomarge: ${netMargin} | EPS: ${eps} | EBITDA: ${ebitda}
-ROE: ${roe} | D/E: ${deRatio} | Current Ratio: ${currentRatio} | FCF/Share: ${fcfPS} | Div.Rendite: ${divYield}
-Analysten: ${analystStr}
+ECHTE DATEN (exakt uebernehmen, nicht veraendern):
+Kurs: ${liveKurs} ${currency} | 52W: ${w52low}-${w52high} | MarketCap: ${mktCapStr} | Shares: ${sharesOut?fmt(sharesOut)+' Stk':'n/a'}
+Boerse: ${exchange} | Sektor: ${sektor} | Industrie: ${industrie} | HQ: ${hq} | CEO: ${ceo} | MA: ${employees} | IPO: ${ipoDate}
+KGV: ${pe}x | P/S: ${ps}x | P/B: ${pb}x | EV: ${ev} | DCF: ${analystPT} | Beta: ${beta}
+Umsatz: ${revenue} (${revenueYoY}) | Nettomarge: ${netMargin} | EPS: ${eps} | EBITDA: ${ebitda} | ROE: ${roe}
+D/E: ${deRatio} | Curr. Ratio: ${currentRatio} | FCF/Share: ${fcfPS} | Div.Rendite: ${divYield}
+Analysten: ${analystStr} | Short Interest: ${shortPct} | Inst. Own.: ${instPct}
 Insider: ${insiderStr}
-Earnings: ${earningsStr}
-Dividenden: ${divStr}
-Inst. Ownership: ${instOwnership}
-Short Interest: ${shortPct}
+Earnings: ${earningsStr} | Dividenden: ${divStr}
 RSI(14): ${rsi} - ${rsiSignal}
-MACD: ${macd} | Signal: ${macdSignal} | Hist: ${macdHist} | Trend: ${macdTrend}
-Bollinger: Upper ${bbUpper} | Middle ${bbMiddle} | Lower ${bbLower} | Signal: ${bbSignal}
+MACD: ${macdVal} | Signal: ${macdSignalVal} | Hist: ${macdHistVal} | Trend: ${macdTrend}
+Bollinger: Upper ${bbUpper} / Mid ${bbMiddle} / Lower ${bbLower} | ${bbSignal}
 
 NEWS:
 ${articles.map((a,i)=>`${i+1}. [${a.publishedAt?.slice(0,10)}] ${a.title}`).join('\n')}
 
-Antworte NUR mit validem JSON. Kein Markdown. Keine Zeilenumbrueche in Strings. Alle schaetzen-Felder mit realistischen Werten.
+Antworte NUR mit validem JSON. Kein Markdown. Keine Zeilenumbrueche in Strings.
 
-{"ticker":"${t}","companyName":"${longName}","exchange":"${exchange}","sector":"${sektor}","hq":"${hq}","ceo":"${ceo}","employees":"${employees}","stand":"${today}","score":65,"verdict":"Urteil","verdictText":"3-4 Saetze Deutsch.","warning":"Kritische Risiken oder leerer String","kurs":"${liveKurs} ${currency}","w52low":"${w52low} ${currency}","w52high":"${w52high} ${currency}","w52lowRaw":${w52low},"w52highRaw":${w52high},"kursRaw":${liveKurs},"marketcap":"${fmtUSD(mktCap)}","volume":"${(vol/1e6).toFixed(1)} Mio.","beta":"${beta}","analystPT":"${analystPT}","rsi":"${rsi} - ${rsiSignal}","macd":"MACD ${macd} | ${macdTrend}","bollinger":"BB Upper ${bbUpper} / Mid ${bbMiddle} / Lower ${bbLower} | ${bbSignal}","earnings":"${earningsStr}","shortInterest":"${shortPct}","instOwnership":"${instOwnership.slice(0,80)}","chips":[{"label":"CEO","value":"${ceo}"},{"label":"Sitz","value":"${hq}"},{"label":"Mitarbeiter","value":"${employees}"},{"label":"IPO","value":"${ipoDate}"},{"label":"Stand","value":"${today}"}],"kpis":{"bewertung":[{"k":"Market Cap","v":"${fmtUSD(mktCap)}","color":""},{"k":"EV","v":"${ev}","color":""},{"k":"KGV (TTM)","v":"${pe}x","color":""},{"k":"P/S (TTM)","v":"${ps}x","color":""},{"k":"DCF Fair Value","v":"${analystPT}","color":"pos"}],"pl":[{"k":"Umsatz TTM","v":"${revenue}","color":"pos"},{"k":"Umsatz YoY","v":"${revenueYoY}","color":"pos"},{"k":"Nettomarge","v":"${netMargin}","color":"pos"},{"k":"EPS (TTM)","v":"${eps} USD","color":"pos"},{"k":"EBITDA","v":"${ebitda}","color":"pos"}],"bilanz":[{"k":"Current Ratio","v":"${currentRatio}x","color":""},{"k":"D/E Ratio","v":"${deRatio}x","color":""},{"k":"ROE","v":"${roe}","color":"pos"},{"k":"FCF/Share","v":"${fcfPS} USD","color":"pos"},{"k":"Div. Rendite","v":"${divYield}","color":""}],"kapital":[{"k":"Analysten","v":"${analystStr}","color":"pos"},{"k":"Inst. Own.","v":"schaetzen%","color":""},{"k":"Short Interest","v":"${shortPct}","color":""},{"k":"P/B (TTM)","v":"${pb}x","color":""},{"k":"Shares out.","v":"${sharesOut?fmt(sharesOut)+' Stk':'n/a'}","color":""}],"aktie":[{"k":"RSI (14T)","v":"${rsi} - ${rsiSignal}","color":""},{"k":"MACD","v":"${macdTrend}","color":""},{"k":"Bollinger","v":"${bbSignal}","color":""},{"k":"Beta","v":"${beta}","color":""},{"k":"Earnings","v":"schaetzen","color":""}]},"projekte":[{"name":"schaetzen","standort":"Global","kapazitaet":"schaetzen","status":"schaetzen","details":"schaetzen","kapColor":"pos"},{"name":"schaetzen","standort":"schaetzen","kapazitaet":"schaetzen","status":"schaetzen","details":"schaetzen","kapColor":""}],"news":[${newsItems.join(',')}],"insider":"${insiderStr.replace(/"/g,"'")}","dividenden":"${divStr}","bullCase":"schaetzen","baseCase":"schaetzen","bearCase":"schaetzen","chancen":["schaetzen","schaetzen","schaetzen","schaetzen","schaetzen","schaetzen"],"risiken":["schaetzen","schaetzen","schaetzen","schaetzen","schaetzen","schaetzen"],"szenarios":[{"name":"Bull","color":"pos","gew":"25%","annahmen":"schaetzen","fv":"schaetzen USD","begruendung":"schaetzen"},{"name":"Base","color":"gold","gew":"50%","annahmen":"schaetzen","fv":"schaetzen USD","begruendung":"schaetzen"},{"name":"Bear","color":"neg","gew":"25%","annahmen":"schaetzen","fv":"schaetzen USD","begruendung":"schaetzen"}],"fairValueGew":"schaetzen USD","fairValueCalc":"schaetzen","fairValueNote":"Kurs: ${liveKurs} USD","kapEigenkapital":[{"k":"Shares out.","v":"${sharesOut?fmt(sharesOut)+' Stk':'n/a'}","color":""},{"k":"Buybacks","v":"schaetzen","color":"pos"},{"k":"Dividende","v":"${divYield}","color":""},{"k":"Insider (zuletzt)","v":"schaetzen","color":""},{"k":"Inst. Own.","v":"schaetzen%","color":""}],"kapFremdkapital":[{"k":"Gesamtschulden","v":"schaetzen","color":""},{"k":"Net Debt","v":"schaetzen","color":""},{"k":"D/E Ratio","v":"${deRatio}x","color":""},{"k":"Current Ratio","v":"${currentRatio}x","color":"pos"},{"k":"ROE","v":"${roe}","color":"pos"}],"quellen":"Yahoo Finance (Live-Kurse + Technische Analyse), FMP (Fundamentaldaten + Insider + Earnings), NewsAPI (News)"}`;
+{"ticker":"${t}","companyName":"${longName}","exchange":"${exchange}","sector":"${sektor}","hq":"${hq}","ceo":"${ceo}","employees":"${employees}","stand":"${today}","score":65,"verdict":"Urteil","verdictText":"3-4 Saetze Deutsch.","warning":"Kritische Risiken oder leerer String","kurs":"${liveKurs} ${currency}","w52low":"${w52low} ${currency}","w52high":"${w52high} ${currency}","w52lowRaw":${w52low},"w52highRaw":${w52high},"kursRaw":${liveKurs},"marketcap":"${mktCapStr}","volume":"${(vol/1e6).toFixed(1)} Mio.","beta":"${beta}","analystPT":"${analystPT}","rsi":"${rsi}","rsiSignal":"${rsiSignal}","macd":"${macdVal}","macdSignal":"${macdSignalVal}","macdHist":"${macdHistVal}","macdTrend":"${macdTrend}","bbUpper":"${bbUpper}","bbMiddle":"${bbMiddle}","bbLower":"${bbLower}","bbSignal":"${bbSignal}","shortInterest":"${shortPct}","instOwnership":"${instPct}","earnings":"${earningsStr}","chips":[{"label":"CEO","value":"${ceo}"},{"label":"Sitz","value":"${hq}"},{"label":"Mitarbeiter","value":"${employees}"},{"label":"IPO","value":"${ipoDate}"},{"label":"Stand","value":"${today}"}],"kpis":{"bewertung":[{"k":"Market Cap","v":"${mktCapStr}","color":""},{"k":"EV","v":"${ev}","color":""},{"k":"KGV (TTM)","v":"${pe}x","color":""},{"k":"P/S (TTM)","v":"${ps}x","color":""},{"k":"DCF Fair Value","v":"${analystPT}","color":"pos"}],"pl":[{"k":"Umsatz TTM","v":"${revenue}","color":"pos"},{"k":"Umsatz YoY","v":"${revenueYoY}","color":"pos"},{"k":"Nettomarge","v":"${netMargin}","color":"pos"},{"k":"EPS (TTM)","v":"${eps} USD","color":"pos"},{"k":"EBITDA","v":"${ebitda}","color":"pos"}],"bilanz":[{"k":"Current Ratio","v":"${currentRatio}x","color":""},{"k":"D/E Ratio","v":"${deRatio}x","color":""},{"k":"ROE","v":"${roe}","color":"pos"},{"k":"FCF/Share","v":"${fcfPS} USD","color":"pos"},{"k":"Div. Rendite","v":"${divYield}","color":""}],"kapital":[{"k":"Analysten","v":"${analystStr}","color":"pos"},{"k":"Inst. Own.","v":"${instPct}","color":""},{"k":"Short Interest","v":"${shortPct}","color":""},{"k":"P/B (TTM)","v":"${pb}x","color":""},{"k":"Shares out.","v":"${sharesOut?fmt(sharesOut)+' Stk':'n/a'}","color":""}],"aktie":[{"k":"RSI (14T)","v":"${rsi} - ${rsiSignal}","color":""},{"k":"MACD Trend","v":"${macdTrend}","color":""},{"k":"Bollinger","v":"${bbSignal}","color":""},{"k":"Beta","v":"${beta}","color":""},{"k":"Earnings","v":"schaetzen","color":""}]},"projekte":[{"name":"schaetzen","standort":"Global","kapazitaet":"schaetzen","status":"schaetzen","details":"schaetzen","kapColor":"pos"},{"name":"schaetzen","standort":"schaetzen","kapazitaet":"schaetzen","status":"schaetzen","details":"schaetzen","kapColor":""}],"news":[${newsItems.join(',')}],"insider":"${insiderStr.replace(/"/g,"'")}","dividenden":"${divStr}","bullCase":"schaetzen","baseCase":"schaetzen","bearCase":"schaetzen","chancen":["schaetzen","schaetzen","schaetzen","schaetzen","schaetzen","schaetzen"],"risiken":["schaetzen","schaetzen","schaetzen","schaetzen","schaetzen","schaetzen"],"szenarios":[{"name":"Bull","color":"pos","gew":"25%","annahmen":"schaetzen","fv":"schaetzen USD","begruendung":"schaetzen"},{"name":"Base","color":"gold","gew":"50%","annahmen":"schaetzen","fv":"schaetzen USD","begruendung":"schaetzen"},{"name":"Bear","color":"neg","gew":"25%","annahmen":"schaetzen","fv":"schaetzen USD","begruendung":"schaetzen"}],"fairValueGew":"schaetzen USD","fairValueCalc":"schaetzen","fairValueNote":"Kurs: ${liveKurs} USD","kapEigenkapital":[{"k":"Shares out.","v":"${sharesOut?fmt(sharesOut)+' Stk':'n/a'}","color":""},{"k":"Buybacks","v":"schaetzen","color":"pos"},{"k":"Dividende","v":"${divYield}","color":""},{"k":"Insider (zuletzt)","v":"schaetzen","color":""},{"k":"Inst. Own.","v":"${instPct}","color":""}],"kapFremdkapital":[{"k":"Gesamtschulden","v":"schaetzen","color":""},{"k":"Net Debt","v":"schaetzen","color":""},{"k":"D/E Ratio","v":"${deRatio}x","color":""},{"k":"Current Ratio","v":"${currentRatio}x","color":"pos"},{"k":"ROE","v":"${roe}","color":"pos"}],"quellen":"Yahoo Finance (Live-Kurse + Technische Analyse), FMP (Fundamentaldaten + Insider + Earnings), NewsAPI (News)"}`;
 
   try {
     const response=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':process.env.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4000,system:'Du bist Aktienanalyst. Antworte NUR mit validem JSON. Kein Markdown. Keine Zeilenumbrueche in Strings. Echte Datenpunkte exakt uebernehmen. Alle schaetzen-Felder mit realistischen Werten fuer den Ticker fuellen.',messages:[{role:'user',content:prompt}]}),
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4000,system:'Du bist Aktienanalyst. Antworte NUR mit validem JSON. Kein Markdown. Keine Zeilenumbrueche in Strings. Echte Datenpunkte exakt uebernehmen. Alle schaetzen-Felder mit realistischen Werten fuellen.',messages:[{role:'user',content:prompt}]}),
     });
     if(!response.ok){const e=await response.json().catch(()=>({}));return res.status(502).json({error:e.error?.message||'API Fehler'});}
     const data=await response.json();
