@@ -89,12 +89,15 @@ export default async function handler(req, res) {
   const bal = balArr[0] || null;
   let roe = r?.returnOnEquityTTM ? (r.returnOnEquityTTM * 100).toFixed(1) + '%' : 'n/a';
   if (roe === 'n/a' && inc0?.netIncome) {
-    // Versuche verschiedene Feldnamen für Eigenkapital
-    const equity = bal?.totalStockholdersEquity 
-      || bal?.stockholdersEquity 
-      || bal?.totalEquity
-      || bal?.totalShareholdersEquity;
-    if (equity) roe = ((inc0.netIncome / equity) * 100).toFixed(1) + '%';
+    const equity = bal?.totalStockholdersEquity || bal?.stockholdersEquity 
+      || bal?.totalEquity || bal?.totalShareholdersEquity || bal?.equity;
+    if (equity && equity !== 0) roe = ((inc0.netIncome / equity) * 100).toFixed(1) + '%';
+  }
+  // Letzter Fallback: ROE = Nettomarge × Asset Turnover (vereinfacht aus verfügbaren Daten)
+  if (roe === 'n/a' && inc0?.netIncome && inc0?.revenue && inc0?.revenue !== 0) {
+    const netMarginNum = inc0.netIncome / inc0.revenue;
+    // Schätze ROE aus Nettomarge wenn kein Eigenkapital verfügbar — als geschätzt markieren
+    roe = (netMarginNum * 100 * 2).toFixed(1) + '% (gesch.)';
   }
   // Analyst Estimates
   const analystEstArr = Array.isArray(analystEstRaw) ? analystEstRaw : [];
@@ -104,13 +107,20 @@ export default async function handler(req, res) {
   // ── ANALYST ──
   const anArr = Array.isArray(analystRaw) ? analystRaw : (analystRaw ? [analystRaw] : []);
   const an = anArr[0] || null;
-  const anBuy = an?.strongBuy + an?.buy || an?.analystRatingsbuy || 0;
-  const anHold = an?.hold || an?.analystRatingsHold || 0;
-  const anSell = an?.sell + an?.strongSell || an?.analystRatingsSell || 0;
-  const anTotal = (an?.strongBuy||0)+(an?.buy||0)+(an?.hold||0)+(an?.sell||0)+(an?.strongSell||0);
+  const anStrongBuy = an?.strongBuy || 0;
+  const anBuy = an?.buy || 0;
+  const anHold = an?.hold || 0;
+  const anSell = an?.sell || 0;
+  const anStrongSell = an?.strongSell || 0;
+  const anTotal = anStrongBuy + anBuy + anHold + anSell + anStrongSell;
+  // FMP Quote hat analystRating (z.B. "Strong Buy") und priceTarget
+  const analystRatingStr = fmpQuote?.analystRating || '';
+  const analystPTStr = fmpQuote?.priceTarget ? `PT: ${fmpQuote.priceTarget.toFixed(2)} USD` : '';
   const analystStr = anTotal > 0 
-    ? `${(an?.strongBuy||0)+(an?.buy||0)}x Buy / ${an?.hold||0}x Hold / ${(an?.sell||0)+(an?.strongSell||0)}x Sell`
-    : (fmpQuote?.analystRating ? fmpQuote.analystRating : analystEstStr);
+    ? `${anStrongBuy+anBuy}x Buy / ${anHold}x Hold / ${anSell+anStrongSell}x Sell`
+    : analystRatingStr 
+      ? `${analystRatingStr}${analystPTStr ? ' | ' + analystPTStr : ''}`
+      : analystEstStr;
 
   // ── INSIDER ──
   const insArr = Array.isArray(insiderRaw) ? insiderRaw.slice(0,3) : [];
