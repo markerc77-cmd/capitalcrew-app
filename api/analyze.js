@@ -48,11 +48,15 @@ export default async function handler(req, res) {
   const longName = meta.longName || meta.shortName || t;
   const sharesOut = meta.sharesOutstanding || 0;
 
-  // Market Cap — aus parallelem quoteSummary fetch
+  // Market Cap — alle möglichen Quellen
   const summaryDetail = yahooSummaryRaw?.quoteSummary?.result?.[0]?.summaryDetail;
   const keyStats = yahooSummaryRaw?.quoteSummary?.result?.[0]?.defaultKeyStatistics;
-  let mktCap = meta.marketCap || summaryDetail?.marketCap?.raw || 0;
-  if (!mktCap && liveKurs && sharesOut) mktCap = liveKurs * sharesOut;
+  const sharesOutFinal2 = keyStats?.sharesOutstanding?.raw || sharesOut || 0;
+  let mktCap = meta.marketCap 
+    || summaryDetail?.marketCap?.raw 
+    || (liveKurs && sharesOutFinal2 ? liveKurs * sharesOutFinal2 : 0)
+    || (liveKurs && sharesOut ? liveKurs * sharesOut : 0)
+    || 0;
 
   // Short Interest — aus parallelem quoteSummary fetch
   let shortPct = 'n/a';
@@ -69,7 +73,9 @@ export default async function handler(req, res) {
   const beta = prof?.beta?.toFixed(2) || 'n/a', ceo = prof?.ceo || 'n/a';
   const employees = prof?.fullTimeEmployees ? Number(prof.fullTimeEmployees).toLocaleString('de-DE') : 'n/a';
   const ipoDate = prof?.ipoDate || 'n/a';
+  // FMP profile als weiterer Fallback
   if (!mktCap && prof?.mktCap) mktCap = prof.mktCap;
+  if (!mktCap && prof?.price && prof?.sharesOutstanding) mktCap = prof.price * Number(prof.sharesOutstanding);
 
   // ── FMP METRICS TTM (stable) ──
   const metricsArr = Array.isArray(fmpMetricsRaw) ? fmpMetricsRaw : (fmpMetricsRaw ? [fmpMetricsRaw] : []);
