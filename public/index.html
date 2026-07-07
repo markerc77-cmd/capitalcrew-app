@@ -301,6 +301,37 @@ function renderFactsheet(d) {
     </table></div>
     <div class="sh">📰 <b>News &amp; Katalysatoren</b></div>
     <div class="news-wrap">${(d.news||[]).map(n=>`<div class="ni"><div class="nd">${s(n.date)}</div><div class="nt">${s(n.text)}</div></div>`).join('')}</div>
+    <div class="sh">📉 <b>Technische Analyse</b></div>
+    <div class="tbl-wrap" style="margin-bottom:14px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div>
+          <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin-bottom:8px;font-weight:600">📊 RSI (14 Tage)</div>
+          <div style="font-size:22px;font-weight:700;color:var(--gold)">${s(d.rsi,'n/a')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">${s(d.rsiSignal,'—')}</div>
+          <div class="bar-bg" style="margin-top:8px"><div class="bar-fill" style="width:${Math.min(100,Math.max(0,parseFloat(d.rsi)||0))}%;background:${parseFloat(d.rsi)>70?'var(--neg)':parseFloat(d.rsi)<30?'var(--pos)':'var(--gold)'}"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--faint);margin-top:2px"><span>0 Ueberverkauft</span><span>100 Ueberkauft</span></div>
+        </div>
+        <div>
+          <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin-bottom:8px;font-weight:600">📈 MACD (12/26/9)</div>
+          <div style="font-size:16px;font-weight:700;color:${d.macdTrend&&d.macdTrend.includes('Bull')?'var(--pos)':'var(--neg)'}">${s(d.macdTrend,'n/a')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">MACD: <b>${s(d.macd,'n/a')}</b></div>
+          <div style="font-size:11px;color:var(--muted)">Signal: <b>${s(d.macdSignal,'n/a')}</b></div>
+          <div style="font-size:11px;color:var(--muted)">Histogramm: <b>${s(d.macdHist,'n/a')}</b></div>
+        </div>
+        <div>
+          <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin-bottom:8px;font-weight:600">🎯 Bollinger Bands (20/2)</div>
+          <div style="font-size:13px;font-weight:700;color:var(--cyan)">${s(d.bbSignal,'n/a')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Upper: <b class="pos">${s(d.bbUpper,'n/a')}</b></div>
+          <div style="font-size:11px;color:var(--muted)">Middle: <b>${s(d.bbMiddle,'n/a')}</b></div>
+          <div style="font-size:11px;color:var(--muted)">Lower: <b class="neg">${s(d.bbLower,'n/a')}</b></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);display:flex;gap:24px">
+        <div style="font-size:11px;color:var(--muted)">📌 Short Interest: <b style="color:${parseFloat(d.shortInterest)>15?'var(--neg)':'var(--ink)'}">${s(d.shortInterest,'n/a')}</b></div>
+        <div style="font-size:11px;color:var(--muted)">🏛 Inst. Ownership: <b style="color:var(--pos)">${s(d.instOwnership,'n/a')}</b></div>
+        <div style="font-size:11px;color:var(--muted)">📅 Earnings: <b>${s(d.earnings,'n/a')}</b></div>
+      </div>
+    </div>
     <div class="sh">🎯 <b>Investment-Thesen</b></div>
     <div class="t3">
       <div class="tcard bull"><h4>🐂 Bull Case</h4><p>${s(d.bullCase)}</p></div>
