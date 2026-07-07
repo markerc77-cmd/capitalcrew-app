@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
   const [yahooRaw, profileRaw, ratiosRaw, incomeRaw, analystRaw,
          insiderRaw, earningsRaw, dividendRaw, newsRaw, priceHistRaw,
-         quoteRaw, summaryRaw, instRaw] = await Promise.all([
+         quoteRaw, summaryRaw, instRaw, balanceRaw, analystEstRaw] = await Promise.all([
     safe(fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=1y`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
     safe(fetch(`https://financialmodelingprep.com/stable/profile?symbol=${t}&apikey=${FMP}`).then(r=>r.json())),
     safe(fetch(`https://financialmodelingprep.com/stable/ratios-ttm?symbol=${t}&apikey=${FMP}`).then(r=>r.json())),
@@ -28,6 +28,8 @@ export default async function handler(req, res) {
     safe(fetch(`https://financialmodelingprep.com/stable/quote?symbol=${t}&apikey=${FMP}`).then(r=>r.json())),
     safe(fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${t}?modules=summaryDetail,defaultKeyStatistics`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
     safe(fetch(`https://financialmodelingprep.com/stable/institutional-ownership/institutional-holders?symbol=${t}&apikey=${FMP}`).then(r=>r.json())),
+    safe(fetch(`https://financialmodelingprep.com/stable/balance-sheet-statement-ttm?symbol=${t}&apikey=${FMP}`).then(r=>r.json())),
+    safe(fetch(`https://financialmodelingprep.com/stable/analyst-estimates?symbol=${t}&limit=2&apikey=${FMP}`).then(r=>r.json())),
   ]);
 
   // ── YAHOO KURSDATEN ──
@@ -68,7 +70,17 @@ export default async function handler(req, res) {
   const pb = r?.priceToBookRatioTTM?.toFixed(1) || 'n/a';
   const fcfPS = r?.freeCashFlowPerShareTTM?.toFixed(2) || 'n/a';
   const divYield = r?.dividendYieldTTM ? (r.dividendYieldTTM * 100).toFixed(2) + '%' : '0%';
-  const roe = r?.returnOnEquityTTM ? (r.returnOnEquityTTM * 100).toFixed(1) + '%' : 'n/a';
+  // ROE aus Balance Sheet berechnen falls Ratio fehlt
+  const balArr = Array.isArray(balanceRaw) ? balanceRaw : (balanceRaw ? [balanceRaw] : []);
+  const bal = balArr[0] || null;
+  let roe = r?.returnOnEquityTTM ? (r.returnOnEquityTTM * 100).toFixed(1) + '%' : 'n/a';
+  if (roe === 'n/a' && inc0?.netIncome && bal?.totalStockholdersEquity) {
+    roe = ((inc0.netIncome / bal.totalStockholdersEquity) * 100).toFixed(1) + '%';
+  }
+  // Analyst Estimates
+  const analystEstArr = Array.isArray(analystEstRaw) ? analystEstRaw : [];
+  const analystEst = analystEstArr[0] || null;
+  const analystEstStr = analystEst ? `EPS-Est: ${analystEst.estimatedEpsAvg?.toFixed(2)||'n/a'} | Rev-Est: ${analystEst.estimatedRevenueAvg?fmt(analystEst.estimatedRevenueAvg)+' USD':'n/a'}` : 'n/a';
   const deRatio = r?.debtToEquityRatioTTM?.toFixed(2) || 'n/a';
   const currentRatio = r?.currentRatioTTM?.toFixed(2) || 'n/a';
   const netMarginR = r?.netProfitMarginTTM ? (r.netProfitMarginTTM * 100).toFixed(1) + '%' : 'n/a';
@@ -91,7 +103,8 @@ export default async function handler(req, res) {
   const anHold = an?.analystRatingsHold || an?.hold || 0;
   const anSell = an?.analystRatingsSell || an?.sell || an?.strongSell || 0;
   const anTotal = anBuy + anHold + anSell;
-  const analystStr = anTotal > 0 ? `${anBuy}x Buy / ${anHold}x Hold / ${anSell}x Sell` : (fmpQuote?.analystRating || 'n/a');
+  const analystStr = anTotal > 0 ? `${anBuy}x Buy / ${anHold}x Hold / ${anSell}x Sell` 
+    : (fmpQuote?.analystRating ? fmpQuote.analystRating : analystEstStr);
 
   // ── INSIDER ──
   const insArr = Array.isArray(insiderRaw) ? insiderRaw.slice(0,3) : [];
