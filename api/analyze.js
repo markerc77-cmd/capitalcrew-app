@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
   // ── PARALLEL FETCHES ──
   const [yahooRaw, fmpProfileRaw, fmpMetricsRaw, fmpIncomeRaw, fmpAnalystRaw,
-         fmpInsiderRaw, fmpEarningsRaw, fmpDividendRaw, newsRaw, priceHistRaw, yahooSummaryRaw] = await Promise.all([
+         fmpInsiderRaw, fmpEarningsRaw, fmpDividendRaw, newsRaw, priceHistRaw, yahooSummaryRaw, fmpQuoteRaw] = await Promise.all([
     // Yahoo Finance — Live Kurs
     safe(fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=1y`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
     // FMP stable — Firmenprofil
@@ -35,8 +35,10 @@ export default async function handler(req, res) {
     safe(fetch(`https://newsapi.org/v2/everything?q=${t}+stock&language=en&sortBy=publishedAt&pageSize=5&apiKey=${NEWS}`).then(r=>r.json())),
     // Yahoo — Preisverlauf für Technische Analyse
     safe(fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=6mo`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
-    // Yahoo — quoteSummary für Market Cap + Short Interest
+    // Yahoo — quoteSummary für Short Interest
     safe(fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${t}?modules=summaryDetail,defaultKeyStatistics`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
+    // FMP — Quote für zuverlässigen Market Cap
+    safe(fetch(`https://financialmodelingprep.com/stable/quote?symbol=${t}&apikey=${FMP}`).then(r=>r.json())),
   ]);
 
   // ── YAHOO KURSDATEN ──
@@ -51,10 +53,12 @@ export default async function handler(req, res) {
   // Market Cap — alle möglichen Quellen
   const summaryDetail = yahooSummaryRaw?.quoteSummary?.result?.[0]?.summaryDetail;
   const keyStats = yahooSummaryRaw?.quoteSummary?.result?.[0]?.defaultKeyStatistics;
-  const sharesOutFinal2 = keyStats?.sharesOutstanding?.raw || sharesOut || 0;
+  const fmpQuote = Array.isArray(fmpQuoteRaw) ? fmpQuoteRaw[0] : fmpQuoteRaw;
+  const sharesFromStats = keyStats?.sharesOutstanding?.raw || sharesOut || 0;
   let mktCap = meta.marketCap 
+    || fmpQuote?.marketCap
     || summaryDetail?.marketCap?.raw 
-    || (liveKurs && sharesOutFinal2 ? liveKurs * sharesOutFinal2 : 0)
+    || (liveKurs && sharesFromStats ? liveKurs * sharesFromStats : 0)
     || (liveKurs && sharesOut ? liveKurs * sharesOut : 0)
     || 0;
 
