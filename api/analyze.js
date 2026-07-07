@@ -19,8 +19,8 @@ export default async function handler(req, res) {
     safe(fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=1y`,{headers:{'User-Agent':'Mozilla/5.0'}}).then(r=>r.json())),
     // FMP stable — Firmenprofil
     safe(fetch(`https://financialmodelingprep.com/stable/profile?symbol=${t}&apikey=${FMP}`).then(r=>r.json())),
-    // FMP stable — Key Metrics TTM
-    safe(fetch(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${t}&apikey=${FMP}`).then(r=>r.json())),
+    // FMP stable — Ratios TTM (KGV, Current Ratio, D/E, etc.)
+    safe(fetch(`https://financialmodelingprep.com/stable/ratios-ttm?symbol=${t}&apikey=${FMP}`).then(r=>r.json())),
     // FMP stable — Income Statement
     safe(fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${t}&limit=2&apikey=${FMP}`).then(r=>r.json())),
     // FMP stable — Analyst Ratings
@@ -79,16 +79,17 @@ export default async function handler(req, res) {
   // ── FMP METRICS TTM (stable) ──
   const metricsArr = Array.isArray(fmpMetricsRaw) ? fmpMetricsRaw : (fmpMetricsRaw ? [fmpMetricsRaw] : []);
   const m = metricsArr[0] || null;
-  const pe = m?.peRatio?.toFixed(1) || m?.peRatioTTM?.toFixed(1) || 'n/a';
-  const ps = m?.priceToSalesRatio?.toFixed(1) || m?.priceToSalesRatioTTM?.toFixed(1) || 'n/a';
-  const pb = m?.pbRatio?.toFixed(1) || m?.pbRatioTTM?.toFixed(1) || 'n/a';
-  const ev = m?.enterpriseValue ? fmtUSD(m.enterpriseValue) : 'n/a';
-  const fcfPS = m?.freeCashFlowPerShare?.toFixed(2) || 'n/a';
-  const divYield = m?.dividendYield ? (m.dividendYield * 100).toFixed(2) + '%' : '0%';
-  const roe = m?.roe ? (m.roe * 100).toFixed(1) + '%' : 'n/a';
-  const deRatio = m?.debtToEquity?.toFixed(2) || 'n/a';
-  const currentRatio = m?.currentRatio?.toFixed(2) || 'n/a';
-  const analystPT = m?.dcf ? m.dcf.toFixed(2) + ' USD' : 'n/a';
+  // Ratios TTM Felder (stable API Feldnamen)
+  const pe = m?.priceToEarningsRatioTTM?.toFixed(1) || 'n/a';
+  const ps = m?.priceToSalesRatioTTM?.toFixed(1) || 'n/a';
+  const pb = m?.priceToBookRatioTTM?.toFixed(1) || 'n/a';
+  const ev = 'n/a'; // EV kommt separat
+  const fcfPS = m?.freeCashFlowPerShareTTM?.toFixed(2) || 'n/a';
+  const divYield = m?.dividendYieldTTM ? (m.dividendYieldTTM * 100).toFixed(2) + '%' : '0%';
+  const roe = m?.returnOnEquityTTM ? (m.returnOnEquityTTM * 100).toFixed(1) + '%' : 'n/a';
+  const deRatio = m?.debtToEquityRatioTTM?.toFixed(2) || 'n/a';
+  const currentRatio = m?.currentRatioTTM?.toFixed(2) || 'n/a';
+  const analystPT = 'n/a'; // DCF separat
 
   // ── FMP INCOME (stable) ──
   const incArr = Array.isArray(fmpIncomeRaw) ? fmpIncomeRaw : [];
