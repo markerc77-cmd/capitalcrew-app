@@ -250,6 +250,8 @@ function s(v,fb='—'){return(v!==undefined&&v!==null&&v!=='')? v:fb;}
 function renderFactsheet(d) {
   const dotPct = pct(d.w52lowRaw||0,d.w52highRaw||1,d.kursRaw||0);
   const scorePct = Math.min(100,Math.max(0,d.score||0));
+  const exchLower = (d.exchange||'').toLowerCase();
+  d.tvExchange = exchLower.includes('nasdaq') ? 'NASDAQ' : ((d.ticker||'').endsWith('.DE') ? 'XETRA' : 'NYSE');
   const kpiLabels=['💰 Bewertung','📉 P&L','🏦 Bilanz','🏗 Kapital','📌 Aktie'];
   const kpiKeys=['bewertung','pl','bilanz','kapital','aktie'];
   const kpiCards=kpiKeys.map((key,i)=>`<div class="kcard"><div class="klbl">${kpiLabels[i]}</div>${(d.kpis?.[key]||[]).map(r=>`<div class="kr"><span class="kk">${s(r.k)}</span><span class="kv ${r.color||''}">${s(r.v)}</span></div>`).join('')}</div>`).join('');
@@ -294,7 +296,7 @@ function renderFactsheet(d) {
     <div class="sh">📊 <b>Chart</b> — TradingView</div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:14px;">
       <iframe 
-        src="https://s.tradingview.com/widgetembed/?frameElementId=tv_${d.ticker}&symbol=${d.exchange === 'NasdaqGS' || d.exchange === 'NASDAQ' || d.exchange === 'NasdaqGM' ? 'NASDAQ' : 'NYSE'}%3A${d.ticker}&interval=D&hidesidetoolbar=0&hidetoptoolbar=0&symboledit=0&saveimage=0&toolbarbg=0F1825&theme=dark&style=1&timezone=Europe%2FBerlin&studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies&locale=de_DE"
+        src="https://s.tradingview.com/widgetembed/?frameElementId=tv_${d.ticker}&symbol=${d.tvExchange}%3A${d.ticker}&interval=D&hidesidetoolbar=0&hidetoptoolbar=0&symboledit=0&saveimage=0&toolbarbg=0F1825&theme=dark&style=1&timezone=Europe%2FBerlin&studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies&locale=de_DE"
         style="width:100%;height:400px;border:none;"
         allowtransparency="true"
         scrolling="no"
