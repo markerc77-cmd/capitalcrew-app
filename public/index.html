@@ -252,6 +252,9 @@ function renderFactsheet(d) {
   const scorePct = Math.min(100,Math.max(0,d.score||0));
   const exchLower = (d.exchange||'').toLowerCase();
   d.tvExchange = exchLower.includes('nasdaq') ? 'NASDAQ' : ((d.ticker||'').endsWith('.DE') ? 'XETRA' : 'NYSE');
+  const rsiNum = parseFloat(d.rsi)||0;
+  d.rsiColor = rsiNum>70 ? 'var(--neg)' : rsiNum<30 ? 'var(--pos)' : 'var(--gold)';
+  d.macdColor = (d.macdTrend&&d.macdTrend.includes('Bull')) ? 'var(--pos)' : 'var(--neg)';
   const kpiLabels=['💰 Bewertung','📉 P&L','🏦 Bilanz','🏗 Kapital','📌 Aktie'];
   const kpiKeys=['bewertung','pl','bilanz','kapital','aktie'];
   const kpiCards=kpiKeys.map((key,i)=>`<div class="kcard"><div class="klbl">${kpiLabels[i]}</div>${(d.kpis?.[key]||[]).map(r=>`<div class="kr"><span class="kk">${s(r.k)}</span><span class="kv ${r.color||''}">${s(r.v)}</span></div>`).join('')}</div>`).join('');
